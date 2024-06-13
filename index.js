@@ -24,10 +24,23 @@ async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
 
+    // Sending posts data with pagination
     app.get("/posts", async (req, res) => {
-      const result = await postCollection.find().toArray();
-      res.send(result);
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+      const skip = (page - 1) * limit;
+
+      const totalPosts = await postCollection.countDocuments();
+      const result = await postCollection.find().skip(skip).limit(limit).toArray();
+
+      res.send({
+        totalPosts,
+        totalPages: Math.ceil(totalPosts / limit),
+        currentPage: page,
+        posts: result
+      });
     });
+    
 
     await client.db("admin").command({ ping: 1 });
     console.log(
@@ -36,6 +49,7 @@ async function run() {
   } finally {
   }
 }
+
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
