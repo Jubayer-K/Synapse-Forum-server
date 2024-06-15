@@ -9,10 +9,7 @@ const port = process.env.PORT || 5000;
 
 // middleware
 const corsOptions = {
-  origin: [
-    "http://localhost:5174",
-    "http://localhost:5173",
-  ],
+  origin: ["http://localhost:5174", "http://localhost:5173"],
   credentials: true,
   optionsSuccessStatus: 200,
 };
@@ -20,7 +17,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
-
 
 // verify jwt middleware
 
@@ -39,7 +35,6 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.bv8l8yc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -55,7 +50,7 @@ async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
 
-     // jwt generate
+    // jwt generate
     app.post("/jwt", async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
@@ -90,16 +85,26 @@ async function run() {
       const skip = (page - 1) * limit;
 
       const totalPosts = await postCollection.countDocuments();
-      const result = await postCollection.find().skip(skip).limit(limit).toArray();
+      const result = await postCollection
+        .find()
+        .skip(skip)
+        .limit(limit)
+        .toArray();
 
       res.send({
         totalPosts,
         totalPages: Math.ceil(totalPosts / limit),
         currentPage: page,
-        posts: result
+        posts: result,
       });
     });
-    
+
+    // save post data
+    app.post("/posts", async (req, res) => {
+      const postData = req.body;
+      const result = await postCollection.insertOne(postData);
+      res.send(result);
+    });
 
     await client.db("admin").command({ ping: 1 });
     console.log(
