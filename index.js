@@ -49,6 +49,9 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
+    const commentCollection = client
+      .db("synapseForumDB")
+      .collection("comments");
 
     // jwt generate
     app.post("/jwt", async (req, res) => {
@@ -87,6 +90,7 @@ async function run() {
       const totalPosts = await postCollection.countDocuments();
       const result = await postCollection
         .find()
+        .sort({ posted_time: -1 }) // Sort by posted_time in descending order
         .skip(skip)
         .limit(limit)
         .toArray();
@@ -115,16 +119,72 @@ async function run() {
         return res.status(403).send({ message: "forbidden access" });
       }
       const result = await postCollection
-        .find({author_email: email,
-        })
+        .find({ author_email: email })
+        .sort({ posted_time: -1 })
         .toArray();
       res.send(result);
+    });
+
+    // sending comment data
+    app.get("/comments", async (req, res) => {
+      const result = await commentCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get comments by postId
+    app.get("/comments/:postId", async (req, res) => {
+      const postId = req.params.postId;
+      const query = { postId: postId }; // Assuming postId is stored in the 'postId' field of comments
+
+      try {
+        const result = await commentCollection.find(query).toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching comments:", err);
+        res.status(500).send({ message: "Error fetching comments" });
+      }
     });
 
     // save post data
     app.post("/posts", async (req, res) => {
       const postData = { ...req.body, posted_time: new Date() };
       const result = await postCollection.insertOne(postData);
+      res.send(result);
+    });
+
+  // save upvote increments
+  
+    app.post("/posts/:id/upvote", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await postCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { upvote: 1 } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error upvoting post" });
+      }
+    });
+  // save downvote increments
+
+    app.post("/posts/:id/downvote", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await postCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { downvote: 1 } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error downvoting post" });
+      }
+    });
+
+    // save comment data
+    app.post("/comments", async (req, res) => {
+      const commentData = req.body;
+      const result = await commentCollection.insertOne(commentData);
       res.send(result);
     });
 
