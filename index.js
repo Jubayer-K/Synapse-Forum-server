@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const app = express();
 const cors = require("cors");
@@ -99,9 +99,17 @@ async function run() {
       });
     });
 
+    // single post data
+    app.get("/posts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await postCollection.findOne(query);
+      res.send(result);
+    });
+
     // save post data
     app.post("/posts", async (req, res) => {
-      const postData = req.body;
+      const postData = { ...req.body, posted_time: new Date() };
       const result = await postCollection.insertOne(postData);
       res.send(result);
     });
