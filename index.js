@@ -107,6 +107,20 @@ async function run() {
       res.send(result);
     });
 
+    // user wishlist data
+    app.get("/my-post/:email", verifyToken, async (req, res) => {
+      const tokenEmail = req.user.email;
+      const email = req.params.email;
+      if (tokenEmail !== email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const result = await postCollection
+        .find({author_email: email,
+        })
+        .toArray();
+      res.send(result);
+    });
+
     // save post data
     app.post("/posts", async (req, res) => {
       const postData = { ...req.body, posted_time: new Date() };
