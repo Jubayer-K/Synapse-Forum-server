@@ -50,6 +50,9 @@ async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
     const userCollection = client.db("synapseForumDB").collection("users");
+    const announcementCollection = client
+      .db("synapseForumDB")
+      .collection("announcements");
     const commentCollection = client
       .db("synapseForumDB")
       .collection("comments");
@@ -131,6 +134,11 @@ async function run() {
       const result = await commentCollection.find().toArray();
       res.send(result);
     });
+    // sending announcement data
+    app.get("/announcements", async (req, res) => {
+      const result = await announcementCollection.find().toArray();
+      res.send(result);
+    });
 
     // single comments data
     app.get("/comment/:id", async (req, res) => {
@@ -197,10 +205,28 @@ async function run() {
       res.send(result);
     });
 
+    // save comment data
+    app.post("/announcements", async (req, res) => {
+      const announcement = req.body;
+      const result = await announcementCollection.insertOne(announcement);
+      res.send(result);
+    });
+
     // users related api
     app.post("/users", async (req, res) => {
       const user = req.body;
+      // insert email if user doesn't exist
+      const query = { email: user.email };
+      const existingUser = await userCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "user already exists", insertedId: null });
+      }
       const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    app.get("/users", async (req, res) => {
+      const result = await userCollection.find().toArray();
       res.send(result);
     });
 
