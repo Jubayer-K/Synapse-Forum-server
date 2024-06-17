@@ -49,6 +49,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
+    const userCollection = client.db("synapseForumDB").collection("users");
     const commentCollection = client
       .db("synapseForumDB")
       .collection("comments");
@@ -131,10 +132,18 @@ async function run() {
       res.send(result);
     });
 
+    // single comments data
+    app.get("/comment/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await commentCollection.findOne(query);
+      res.send(result);
+    });
+
     // Get comments by postId
     app.get("/comments/:postId", async (req, res) => {
       const postId = req.params.postId;
-      const query = { postId: postId }; // Assuming postId is stored in the 'postId' field of comments
+      const query = { postId: postId };
 
       try {
         const result = await commentCollection.find(query).toArray();
@@ -152,8 +161,8 @@ async function run() {
       res.send(result);
     });
 
-  // save upvote increments
-  
+    // save upvote increments
+
     app.post("/posts/:id/upvote", async (req, res) => {
       const id = req.params.id;
       try {
@@ -166,7 +175,7 @@ async function run() {
         res.status(500).send({ message: "Error upvoting post" });
       }
     });
-  // save downvote increments
+    // save downvote increments
 
     app.post("/posts/:id/downvote", async (req, res) => {
       const id = req.params.id;
@@ -185,6 +194,21 @@ async function run() {
     app.post("/comments", async (req, res) => {
       const commentData = req.body;
       const result = await commentCollection.insertOne(commentData);
+      res.send(result);
+    });
+
+    // users related api
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // remove data from posts
+    app.delete("/posts/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await postCollection.deleteOne(query);
       res.send(result);
     });
 
