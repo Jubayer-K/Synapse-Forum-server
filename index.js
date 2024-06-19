@@ -4,7 +4,7 @@ const app = express();
 const cors = require("cors");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
-const cookieParser = require("cookie-parser");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -16,7 +16,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(cookieParser());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.bv8l8yc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -39,6 +38,9 @@ async function run() {
     const commentCollection = client
       .db("synapseForumDB")
       .collection("comments");
+    const paymentCollection = client
+      .db("synapseForumDB")
+      .collection("payments");
 
     // jwt generate
     app.post("/jwt", async (req, res) => {
@@ -50,9 +52,7 @@ async function run() {
     });
 
     // verify jwt middleware
-
     const verifyToken = (req, res, next) => {
-      console.log("inside verify token", req.headers.authorization);
       if (!req.headers.authorization) {
         return res.status(401).send({ message: "unauthorized access" });
       }
@@ -83,7 +83,6 @@ async function run() {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
-
 
     // Sending posts data with pagination
     app.get("/posts", async (req, res) => {
@@ -123,6 +122,27 @@ async function run() {
         .sort({ posted_time: -1 })
         .toArray();
       res.send(result);
+    });
+
+    // check admin data using email
+    app.get("/admin-user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email: email });
+      if (user) {
+        res.send({ email: user.email, role: user.role });
+      } else {
+        res.status(404).send({ message: "User not found" });
+      }
+    });
+    // check user data using email
+    app.get("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email: email });
+      if (user) {
+        res.send({ email: user.email, role: user.role });
+      } else {
+        res.status(404).send({ message: "User not found" });
+      }
     });
 
     // sending comment data
@@ -166,7 +186,6 @@ async function run() {
     });
 
     // save upvote increments
-
     app.post("/posts/:id/upvote", async (req, res) => {
       const id = req.params.id;
       try {
@@ -179,8 +198,8 @@ async function run() {
         res.status(500).send({ message: "Error upvoting post" });
       }
     });
-    // save downvote increments
 
+    // save downvote increments
     app.post("/posts/:id/downvote", async (req, res) => {
       const id = req.params.id;
       try {
@@ -249,19 +268,6 @@ async function run() {
       res.send(result);
     });
 
-    // updating users membership
-    app.patch("/users/membership/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          membership: "gold",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updatedDoc);
-      res.send(result);
-    });
-
     // remove data from posts
     app.delete("/posts/:id", async (req, res) => {
       const id = req.params.id;
@@ -270,11 +276,67 @@ async function run() {
       res.send(result);
     });
 
+    // payment intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      console.log(amount, "amount inside the intent");
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    app.get("/payments/:email", verifyToken, async (req, res) => {
+      const query = { email: req.params.email };
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // Save payment and update user membership
+    app.post("/payments", async (req, res) => {
+      const payment = req.body;
+      const email = payment.email;
+
+      try {
+        const paymentResult = await paymentCollection.insertOne(payment);
+
+        if (paymentResult.insertedId) {
+          const filter = { email: email };
+          const updateDoc = {
+            $set: { membership: "gold" },
+          };
+          const updateUserResult = await userCollection.updateOne(filter, updateDoc);
+
+          res.send({
+            paymentResult,
+            updateUserResult,
+          });
+        } else {
+          res.status(500).send({ message: "Failed to save payment" });
+        }
+      } catch (error) {
+        console.error("Error processing payment:", error);
+        res.status(500).send({ message: "Error processing payment" });
+      }
+    });
+
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
   } finally {
+    // Ensure that the client will close when you finish/error
+    // await client.close();
   }
 }
 
