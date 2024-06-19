@@ -139,7 +139,7 @@ async function run() {
       const email = req.params.email;
       const user = await userCollection.findOne({ email: email });
       if (user) {
-        res.send({ email: user.email, role: user.role });
+        res.send({ email: user.email, membership: user.membership });
       } else {
         res.status(404).send({ message: "User not found" });
       }
@@ -329,6 +329,18 @@ async function run() {
         res.status(500).send({ message: "Error processing payment" });
       }
     });
+
+      // stats or analytics
+      app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+        const users = await userCollection.estimatedDocumentCount();
+        const allPosts = await postCollection.estimatedDocumentCount();
+        const allComments = await commentCollection.estimatedDocumentCount();
+        res.send({
+          users,
+          allPosts,
+          allComments,
+        })
+      })
 
     await client.db("admin").command({ ping: 1 });
     console.log(
