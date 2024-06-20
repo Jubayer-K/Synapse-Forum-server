@@ -32,6 +32,7 @@ async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
     const userCollection = client.db("synapseForumDB").collection("users");
+    const tagCollection = client.db("synapseForumDB").collection("tags");
     const announcementCollection = client.db("synapseForumDB").collection("announcements");
     const commentCollection = client.db("synapseForumDB").collection("comments");
     const paymentCollection = client.db("synapseForumDB").collection("payments");
@@ -100,7 +101,7 @@ async function run() {
       });
     });
 
-    // Endpoint to get posts sorted by popularity
+    // get posts sorted by popularity
     app.get("/posts/popular", async (req, res) => {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 5;
@@ -179,6 +180,11 @@ async function run() {
       const result = await commentCollection.find().toArray();
       res.send(result);
     });
+    // sending tag data
+    app.get("/tags", async (req, res) => {
+      const result = await tagCollection.find().toArray();
+      res.send(result);
+    });
 
     // sending announcement data
     app.get("/announcements", async (req, res) => {
@@ -212,6 +218,13 @@ async function run() {
     app.post("/posts", async (req, res) => {
       const postData = { ...req.body, posted_time: new Date() };
       const result = await postCollection.insertOne(postData);
+      res.send(result);
+    });
+
+    // save tag data
+    app.post("/tags", async (req, res) => {
+      const tagData = req.body;
+      const result = await tagCollection.insertOne(tagData);
       res.send(result);
     });
 
