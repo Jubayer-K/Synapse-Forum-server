@@ -30,12 +30,21 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
+    await client.connect();
+
     const postCollection = client.db("synapseForumDB").collection("allPosts");
     const userCollection = client.db("synapseForumDB").collection("users");
     const tagCollection = client.db("synapseForumDB").collection("tags");
-    const announcementCollection = client.db("synapseForumDB").collection("announcements");
-    const commentCollection = client.db("synapseForumDB").collection("comments");
-    const paymentCollection = client.db("synapseForumDB").collection("payments");
+    const announcementCollection = client
+      .db("synapseForumDB")
+      .collection("announcements");
+    const commentCollection = client
+      .db("synapseForumDB")
+      .collection("comments");
+    const paymentCollection = client
+      .db("synapseForumDB")
+      .collection("payments");
+    const reportCollection = client.db("synapseForumDB").collection("reports");
 
     // jwt generate
     app.post("/jwt", async (req, res) => {
@@ -79,26 +88,40 @@ async function run() {
       res.send(result);
     });
 
-    // Sending posts data with pagination
+    // Sending posts data with pagination and optional tag filter
     app.get("/posts", async (req, res) => {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 5;
       const skip = (page - 1) * limit;
+      const tag = req.query.tag; // Tag name from query parameter
 
-      const totalPosts = await postCollection.countDocuments();
-      const result = await postCollection
-        .find()
-        .sort({ posted_time: -1 }) // Sort by posted_time in descending order
-        .skip(skip)
-        .limit(limit)
-        .toArray();
+      let query = {};
+      if (tag) {
+        query = { tags: tag }; // Filter by tag name if tag parameter is provided
+      }
 
-      res.send({
-        totalPosts,
-        totalPages: Math.ceil(totalPosts / limit),
-        currentPage: page,
-        posts: result,
-      });
+      try {
+        // Count total posts matching the query
+        const totalPosts = await postCollection.countDocuments(query);
+
+        // Retrieve posts, optionally filtered by tag, sorted by posted_time in descending order
+        const result = await postCollection
+          .find(query)
+          .sort({ posted_time: -1 })
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+
+        res.send({
+          totalPosts,
+          totalPages: Math.ceil(totalPosts / limit),
+          currentPage: page,
+          posts: result,
+        });
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+        res.status(500).send({ message: "Error fetching posts" });
+      }
     });
 
     // get posts sorted by popularity
@@ -107,32 +130,38 @@ async function run() {
       const limit = parseInt(req.query.limit) || 5;
       const skip = (page - 1) * limit;
 
-      const totalPosts = await postCollection.countDocuments();
-      const result = await postCollection
-        .aggregate([
-          {
-            $addFields: {
-              voteDifference: { $subtract: ["$upvote", "$downvote"] },
-            },
-          },
-          {
-            $sort: { voteDifference: -1 },
-          },
-          {
-            $skip: skip,
-          },
-          {
-            $limit: limit,
-          },
-        ])
-        .toArray();
+      try {
+        const totalPosts = await postCollection.countDocuments();
 
-      res.send({
-        totalPosts,
-        totalPages: Math.ceil(totalPosts / limit),
-        currentPage: page,
-        posts: result,
-      });
+        const result = await postCollection
+          .aggregate([
+            {
+              $addFields: {
+                voteDifference: { $subtract: ["$upvote", "$downvote"] },
+              },
+            },
+            {
+              $sort: { voteDifference: -1 },
+            },
+            {
+              $skip: skip,
+            },
+            {
+              $limit: limit,
+            },
+          ])
+          .toArray();
+
+        res.send({
+          totalPosts,
+          totalPages: Math.ceil(totalPosts / limit),
+          currentPage: page,
+          posts: result,
+        });
+      } catch (error) {
+        console.error("Error fetching popular posts:", error);
+        res.status(500).send({ message: "Error fetching popular posts" });
+      }
     });
 
     // single post data
@@ -180,6 +209,12 @@ async function run() {
       const result = await commentCollection.find().toArray();
       res.send(result);
     });
+    // sending comment data
+    app.get("/reports", async (req, res) => {
+      const result = await reportCollection.find().toArray();
+      res.send(result);
+    });
+
     // sending tag data
     app.get("/tags", async (req, res) => {
       const result = await tagCollection.find().toArray();
@@ -204,6 +239,19 @@ async function run() {
     app.get("/comments/:postId", async (req, res) => {
       const postId = req.params.postId;
       const query = { postId: postId };
+
+      try {
+        const result = await commentCollection.find(query).toArray();
+        res.send(result);
+      } catch (err) {
+        console.error("Error fetching comments:", err);
+        res.status(500).send({ message: "Error fetching comments" });
+      }
+    });
+
+    app.get("/comments/byTitle/:postTitle", async (req, res) => {
+      const postTitle = req.params.postTitle;
+      const query = { postTitle: postTitle };
 
       try {
         const result = await commentCollection.find(query).toArray();
@@ -267,6 +315,26 @@ async function run() {
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Error downvoting post" });
+      }
+    });
+
+    // Endpoint to handle reporting comments
+    app.post("/reports", verifyToken, async (req, res) => {
+      const { commentId, reason, comment } = req.body;
+      const reportData = {
+        commentId: new ObjectId(commentId),
+        comment: comment,
+        reportedBy: req.decoded.email,
+        reason: reason,
+        reportedAt: new Date(),
+      };
+
+      try {
+        const result = await reportCollection.insertOne(reportData);
+        res.send(result);
+      } catch (error) {
+        console.error("Error reporting comment:", error);
+        res.status(500).send({ message: "Error reporting comment" });
       }
     });
 
@@ -347,6 +415,40 @@ async function run() {
       res.send(result);
     });
 
+    // Endpoint to delete a report by ID (admin only)
+    app.delete("/reports/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await reportCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error deleting report" });
+      }
+    });
+
+    // Endpoint to mark a report as resolved (admin only)
+app.put("/reports/:id/resolve", verifyToken, verifyAdmin, async (req, res) => {
+  const reportId = req.params.id;
+
+  try {
+    const query = { _id: new ObjectId(reportId) };
+    const updateDoc = {
+      $set: { resolved: true },
+    };
+
+    const result = await reportCollection.updateOne(query, updateDoc);
+
+    if (result.modifiedCount === 1) {
+      res.send({ message: "Report marked as resolved" });
+    } else {
+      res.status(404).send({ message: "Report not found" });
+    }
+  } catch (error) {
+    console.error("Error marking report as resolved:", error);
+    res.status(500).send({ message: "Error marking report as resolved" });
+  }
+});
+
     // payment intent
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
@@ -386,7 +488,10 @@ async function run() {
           const updateDoc = {
             $set: { membership: "gold" },
           };
-          const updateUserResult = await userCollection.updateOne(filter, updateDoc);
+          const updateUserResult = await userCollection.updateOne(
+            filter,
+            updateDoc
+          );
 
           res.send({
             paymentResult,
@@ -402,7 +507,7 @@ async function run() {
     });
 
     // stats or analytics
-    app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+    app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.estimatedDocumentCount();
       const allPosts = await postCollection.estimatedDocumentCount();
       const allComments = await commentCollection.estimatedDocumentCount();
@@ -414,7 +519,9 @@ async function run() {
     });
 
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
     // Ensure that the client will close when you finish/error
     // await client.close();
