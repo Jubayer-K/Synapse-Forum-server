@@ -32,15 +32,9 @@ async function run() {
   try {
     const postCollection = client.db("synapseForumDB").collection("allPosts");
     const userCollection = client.db("synapseForumDB").collection("users");
-    const announcementCollection = client
-      .db("synapseForumDB")
-      .collection("announcements");
-    const commentCollection = client
-      .db("synapseForumDB")
-      .collection("comments");
-    const paymentCollection = client
-      .db("synapseForumDB")
-      .collection("payments");
+    const announcementCollection = client.db("synapseForumDB").collection("announcements");
+    const commentCollection = client.db("synapseForumDB").collection("comments");
+    const paymentCollection = client.db("synapseForumDB").collection("payments");
 
     // jwt generate
     app.post("/jwt", async (req, res) => {
@@ -106,6 +100,40 @@ async function run() {
       });
     });
 
+    // Endpoint to get posts sorted by popularity
+    app.get("/posts/popular", async (req, res) => {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 5;
+      const skip = (page - 1) * limit;
+
+      const totalPosts = await postCollection.countDocuments();
+      const result = await postCollection
+        .aggregate([
+          {
+            $addFields: {
+              voteDifference: { $subtract: ["$upvote", "$downvote"] },
+            },
+          },
+          {
+            $sort: { voteDifference: -1 },
+          },
+          {
+            $skip: skip,
+          },
+          {
+            $limit: limit,
+          },
+        ])
+        .toArray();
+
+      res.send({
+        totalPosts,
+        totalPages: Math.ceil(totalPosts / limit),
+        currentPage: page,
+        posts: result,
+      });
+    });
+
     // single post data
     app.get("/posts/:id", async (req, res) => {
       const id = req.params.id;
@@ -134,6 +162,7 @@ async function run() {
         res.status(404).send({ message: "User not found" });
       }
     });
+
     // check user data using email
     app.get("/user/:email", async (req, res) => {
       const email = req.params.email;
@@ -150,6 +179,7 @@ async function run() {
       const result = await commentCollection.find().toArray();
       res.send(result);
     });
+
     // sending announcement data
     app.get("/announcements", async (req, res) => {
       const result = await announcementCollection.find().toArray();
@@ -199,6 +229,20 @@ async function run() {
       }
     });
 
+    // remove upvote
+    app.post("/posts/:id/remove-upvote", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await postCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { upvote: -1 } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error removing upvote" });
+      }
+    });
+
     // save downvote increments
     app.post("/posts/:id/downvote", async (req, res) => {
       const id = req.params.id;
@@ -213,6 +257,20 @@ async function run() {
       }
     });
 
+    // remove downvote
+    app.post("/posts/:id/remove-downvote", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await postCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $inc: { downvote: -1 } }
+        );
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Error removing downvote" });
+      }
+    });
+
     // save comment data
     app.post("/comments", async (req, res) => {
       const commentData = req.body;
@@ -220,7 +278,7 @@ async function run() {
       res.send(result);
     });
 
-    // save comment data
+    // save announcement data
     app.post("/announcements", async (req, res) => {
       const announcement = req.body;
       const result = await announcementCollection.insertOne(announcement);
@@ -330,22 +388,20 @@ async function run() {
       }
     });
 
-      // stats or analytics
-      app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
-        const users = await userCollection.estimatedDocumentCount();
-        const allPosts = await postCollection.estimatedDocumentCount();
-        const allComments = await commentCollection.estimatedDocumentCount();
-        res.send({
-          users,
-          allPosts,
-          allComments,
-        })
-      })
+    // stats or analytics
+    app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+      const users = await userCollection.estimatedDocumentCount();
+      const allPosts = await postCollection.estimatedDocumentCount();
+      const allComments = await commentCollection.estimatedDocumentCount();
+      res.send({
+        users,
+        allPosts,
+        allComments,
+      });
+    });
 
     await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensure that the client will close when you finish/error
     // await client.close();
