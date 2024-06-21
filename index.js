@@ -10,6 +10,8 @@ const port = process.env.PORT || 5000;
 // middleware
 const corsOptions = {
   origin: [
+    "http://localhost:5174",
+    "http://localhost:5173",
     "https://twelfth-assignment-forum.web.app",
     "https://twelfth-assignment-forum.firebaseapp.com",
   ],
@@ -33,7 +35,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const postCollection = client.db("synapseForumDB").collection("allPosts");
     const userCollection = client.db("synapseForumDB").collection("users");
@@ -525,10 +527,11 @@ async function run() {
     });
 
     // await client.db("admin").command({ ping: 1 });
-    // console.log(
-    //   "Pinged your deployment. You successfully connected to MongoDB!"
-    // );
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
+    // Ensure that the client will close when you finish/error
     // await client.close();
   }
 }
