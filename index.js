@@ -9,7 +9,10 @@ const port = process.env.PORT || 5000;
 
 // middleware
 const corsOptions = {
-  origin: ["http://localhost:5174", "http://localhost:5173"],
+  origin: [
+    "https://twelfth-assignment-forum.web.app",
+    "https://twelfth-assignment-forum.firebaseapp.com",
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
 };
@@ -82,7 +85,7 @@ async function run() {
       next();
     };
 
-    // get all users admin only 
+    // get all users admin only
     app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
@@ -415,7 +418,9 @@ async function run() {
     app.delete("/reports/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       try {
-        const result = await reportCollection.deleteOne({ _id: new ObjectId(id) });
+        const result = await reportCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
         res.send(result);
       } catch (error) {
         res.status(500).send({ message: "Error deleting report" });
@@ -423,27 +428,32 @@ async function run() {
     });
 
     //mark a report as resolved (admin only)
-app.put("/reports/:id/resolve", verifyToken, verifyAdmin, async (req, res) => {
-  const reportId = req.params.id;
+    app.put(
+      "/reports/:id/resolve",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const reportId = req.params.id;
 
-  try {
-    const query = { _id: new ObjectId(reportId) };
-    const updateDoc = {
-      $set: { resolved: true },
-    };
+        try {
+          const query = { _id: new ObjectId(reportId) };
+          const updateDoc = {
+            $set: { resolved: true },
+          };
 
-    const result = await reportCollection.updateOne(query, updateDoc);
+          const result = await reportCollection.updateOne(query, updateDoc);
 
-    if (result.modifiedCount === 1) {
-      res.send({ message: "Report marked as resolved" });
-    } else {
-      res.status(404).send({ message: "Report not found" });
-    }
-  } catch (error) {
-    console.error("Error marking report as resolved:", error);
-    res.status(500).send({ message: "Error marking report as resolved" });
-  }
-});
+          if (result.modifiedCount === 1) {
+            res.send({ message: "Report marked as resolved" });
+          } else {
+            res.status(404).send({ message: "Report not found" });
+          }
+        } catch (error) {
+          console.error("Error marking report as resolved:", error);
+          res.status(500).send({ message: "Error marking report as resolved" });
+        }
+      }
+    );
 
     // payment intent
     app.post("/create-payment-intent", async (req, res) => {
@@ -514,12 +524,11 @@ app.put("/reports/:id/resolve", verifyToken, verifyAdmin, async (req, res) => {
       });
     });
 
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
-    // Ensure that the client will close when you finish/error
     // await client.close();
   }
 }
