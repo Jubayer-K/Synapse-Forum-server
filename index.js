@@ -82,7 +82,7 @@ async function run() {
       next();
     };
 
-    // users related api
+    // get all users admin only 
     app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
@@ -93,18 +93,15 @@ async function run() {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 5;
       const skip = (page - 1) * limit;
-      const tag = req.query.tag; // Tag name from query parameter
+      const tag = req.query.tag;
 
       let query = {};
       if (tag) {
-        query = { tags: tag }; // Filter by tag name if tag parameter is provided
+        query = { tags: tag };
       }
 
       try {
-        // Count total posts matching the query
         const totalPosts = await postCollection.countDocuments(query);
-
-        // Retrieve posts, optionally filtered by tag, sorted by posted_time in descending order
         const result = await postCollection
           .find(query)
           .sort({ posted_time: -1 })
@@ -318,7 +315,7 @@ async function run() {
       }
     });
 
-    // Endpoint to handle reporting comments
+    //handle reporting comments
     app.post("/reports", verifyToken, async (req, res) => {
       const { commentId, reason, comment } = req.body;
       const reportData = {
@@ -369,7 +366,6 @@ async function run() {
     // users related api
     app.post("/users", async (req, res) => {
       const user = req.body;
-      // insert email if user doesn't exist
       const query = { email: user.email };
       const existingUser = await userCollection.findOne(query);
       if (existingUser) {
@@ -415,7 +411,7 @@ async function run() {
       res.send(result);
     });
 
-    // Endpoint to delete a report by ID (admin only)
+    //delete a report by ID (admin only)
     app.delete("/reports/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       try {
@@ -426,7 +422,7 @@ async function run() {
       }
     });
 
-    // Endpoint to mark a report as resolved (admin only)
+    //mark a report as resolved (admin only)
 app.put("/reports/:id/resolve", verifyToken, verifyAdmin, async (req, res) => {
   const reportId = req.params.id;
 
